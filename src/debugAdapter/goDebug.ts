@@ -18,6 +18,8 @@ import { Client, RPCConnection } from 'json-rpc2';
 import * as os from 'os';
 import * as path from 'path';
 import * as util from 'util';
+import * as crypto from 'crypto';
+import * as os from 'os';
 import {
 	ContinuedEvent,
 	DebugSession,
@@ -1141,6 +1143,12 @@ export class GoDebugSession extends LoggingDebugSession {
 			return convertedLocalPackageFile;
 		}
 
+		const convertedBazelPackageFile = this.inferLocalPathFromRemoteBazelPackage(remotePath);
+		if (convertedBazelPackageFile) {
+			this.remoteToLocalPathMapping.set(remotePath, convertedBazelPackageFile);
+			return convertedBazelPackageFile;
+		}
+
 		// If we cannot find the path in packages, most likely it will be in the current directory.
 		const fileName = getBaseName(remotePath);
 		const globSync = glob.sync(fileName, {
@@ -1153,6 +1161,16 @@ export class GoDebugSession extends LoggingDebugSession {
 			this.remoteToLocalPathMapping.set(remotePath, fullLocalPath);
 			return fullLocalPath;
 		}
+	}
+
+	protected inferLocalPathFromRemoteBazelPackage(remotePath: string): string | undefined {
+		if (!remotePath.startsWith("external/")) {
+			return;
+		}
+		const hash = crypto.createHash('md5').update(this.delve.program).digest("hex");
+		const homedir = os.homedir();
+		const user = os.userInfo().username;
+		return `${homedir}/.cache/bazel/_bazel_${user}/${hash}/${remotePath}`;
 	}
 
 	/**
